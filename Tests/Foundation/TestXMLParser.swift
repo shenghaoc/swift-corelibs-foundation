@@ -240,4 +240,205 @@ class TestXMLParser : XCTestCase {
             ])
         }
     }
+
+    // MARK: - DTD and processing instruction callback values
+
+    private final class DTDDelegate: NSObject, XMLParserDelegate {
+        struct AttributeDeclaration: Equatable {
+            let name: String
+            let element: String
+            let defaultValue: String?
+        }
+
+        struct NotationDeclaration: Equatable {
+            let name: String
+            let publicID: String?
+            let systemID: String?
+        }
+
+        struct UnparsedEntityDeclaration: Equatable {
+            let name: String
+            let publicID: String?
+            let systemID: String?
+            let notationName: String?
+        }
+
+        struct ProcessingInstruction: Equatable {
+            let target: String
+            let data: String?
+        }
+
+        private(set) var attributeDeclarations: [AttributeDeclaration] = []
+        private(set) var notationDeclarations: [NotationDeclaration] = []
+        private(set) var unparsedEntityDeclarations: [UnparsedEntityDeclaration] = []
+        private(set) var processingInstructions: [ProcessingInstruction] = []
+        private(set) var startedElements: [String] = []
+
+        func parser(_ parser: XMLParser, foundAttributeDeclarationWithName attributeName: String, forElement elementName: String, type: String?, defaultValue: String?) {
+            attributeDeclarations.append(AttributeDeclaration(name: attributeName, element: elementName, defaultValue: defaultValue))
+        }
+
+        func parser(_ parser: XMLParser, foundNotationDeclarationWithName name: String, publicID: String?, systemID: String?) {
+            notationDeclarations.append(NotationDeclaration(name: name, publicID: publicID, systemID: systemID))
+        }
+
+        func parser(_ parser: XMLParser, foundUnparsedEntityDeclarationWithName name: String, publicID: String?, systemID: String?, notationName: String?) {
+            unparsedEntityDeclarations.append(UnparsedEntityDeclaration(name: name, publicID: publicID, systemID: systemID, notationName: notationName))
+        }
+
+        func parser(_ parser: XMLParser, foundProcessingInstructionWithTarget target: String, data: String?) {
+            processingInstructions.append(ProcessingInstruction(target: target, data: data))
+        }
+
+        func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String]) {
+            startedElements.append(elementName)
+        }
+    }
+
+    private func parse(_ xml: String, with delegate: XMLParserDelegate) -> Bool {
+        let parser = XMLParser(data: Data(xml.utf8))
+        parser.delegate = delegate
+        return withExtendedLifetime(delegate) { parser.parse() }
+    }
+
+    private func parseFromStream(_ xml: String, with delegate: XMLParserDelegate) -> Bool {
+        let parser = XMLParser(stream: InputStream(data: Data(xml.utf8)))
+        parser.delegate = delegate
+        return withExtendedLifetime(delegate) { parser.parse() }
+    }
+
+    func test_attributeDeclarationRequiredDefaultIsNil() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec type CDATA #REQUIRED>]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "type", element: "Rec", defaultValue: nil),
+        ])
+    }
+
+    func test_attributeDeclarationImpliedDefaultIsNil() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec value CDATA #IMPLIED>]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "value", element: "Rec", defaultValue: nil),
+        ])
+    }
+
+    func test_attributeDeclarationQuotedDefault() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec value CDATA "quoted">]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "value", element: "Rec", defaultValue: "quoted"),
+        ])
+    }
+
+    func test_attributeDeclarationFixedDefault() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec value CDATA #FIXED "fixed">]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "value", element: "Rec", defaultValue: "fixed"),
+        ])
+    }
+
+    func test_notationDeclarationSystemOnly() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!NOTATION n SYSTEM "x">]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.notationDeclarations, [
+            .init(name: "n", publicID: nil, systemID: "x"),
+        ])
+    }
+
+    func test_notationDeclarationPublicOnly() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!NOTATION n PUBLIC "x">]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.notationDeclarations, [
+            .init(name: "n", publicID: "x", systemID: nil),
+        ])
+    }
+
+    func test_processingInstructionWithoutData() {
+        let delegate = DTDDelegate()
+        let xml = "<root><?foo?></root>"
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.processingInstructions, [
+            .init(target: "foo", data: nil),
+        ])
+    }
+
+    func test_unparsedEntityDeclarationWithoutPublicID() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!NOTATION n SYSTEM "x"><!ENTITY e SYSTEM "y" NDATA n>]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.unparsedEntityDeclarations, [
+            .init(name: "e", publicID: nil, systemID: "y", notationName: "n"),
+        ])
+    }
+
+    func test_elementDeclarationWithoutContentModelOrExternalIDs() {
+        // `<!ELEMENT Rec EMPTY>` reports a NULL content model, and a document
+        // that only has an internal subset reports NULL external identifiers.
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY>]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.startedElements, ["Rec"])
+    }
+
+    func test_dataWithRequiredAndImpliedAttributeDeclarations() {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE HealthData [
+        <!ELEMENT HealthData (Rec*)>
+        <!ELEMENT Rec EMPTY>
+        <!ATTLIST Rec
+          type CDATA #REQUIRED
+          value CDATA #IMPLIED
+        >
+        ]>
+        <HealthData>
+        <Rec type="HKQuantityTypeIdentifierHeartRate" value="150"/>
+        <Rec type="HKQuantityTypeIdentifierHeartRate" value="151"/>
+        </HealthData>
+
+        """
+        XCTAssertEqual(xml.utf8.count, 324)
+
+        let delegate = DTDDelegate()
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.startedElements, ["HealthData", "Rec", "Rec"])
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "type", element: "Rec", defaultValue: nil),
+            .init(name: "value", element: "Rec", defaultValue: nil),
+        ])
+    }
+
+    func test_streamWithRequiredAndImpliedAttributeDeclarations() {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE HealthData [
+        <!ELEMENT HealthData (Rec*)>
+        <!ELEMENT Rec EMPTY>
+        <!ATTLIST Rec
+          type CDATA #REQUIRED
+          value CDATA #IMPLIED
+        >
+        ]>
+        <HealthData>
+        <Rec type="HKQuantityTypeIdentifierHeartRate" value="150"/>
+        <Rec type="HKQuantityTypeIdentifierHeartRate" value="151"/>
+        </HealthData>
+
+        """
+        let delegate = DTDDelegate()
+        XCTAssertTrue(parseFromStream(xml, with: delegate))
+        XCTAssertEqual(delegate.startedElements, ["HealthData", "Rec", "Rec"])
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "type", element: "Rec", defaultValue: nil),
+            .init(name: "value", element: "Rec", defaultValue: nil),
+        ])
+    }
 }

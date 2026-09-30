@@ -243,15 +243,15 @@ int _CFXMLInterfaceSAX2GetColumnNumber(_CFXMLInterfaceParserContext ctx) {
 
 void _CFXMLInterfaceSAX2InternalSubset(_CFXMLInterfaceParserContext ctx,
                                        const unsigned char *name,
-                                       const unsigned char *ExternalID,
-                                       const unsigned char *SystemID) {
+                                       const unsigned char *_Nullable ExternalID,
+                                       const unsigned char *_Nullable SystemID) {
     if (ctx != NULL) xmlSAX2InternalSubset(ctx, name, ExternalID, SystemID);
 }
 
 void _CFXMLInterfaceSAX2ExternalSubset(_CFXMLInterfaceParserContext ctx,
                                        const unsigned char *name,
-                                       const unsigned char *ExternalID,
-                                       const unsigned char *SystemID) {
+                                       const unsigned char *_Nullable ExternalID,
+                                       const unsigned char *_Nullable SystemID) {
     if (ctx != NULL) xmlSAX2ExternalSubset(ctx, name, ExternalID, SystemID);
 }
 
