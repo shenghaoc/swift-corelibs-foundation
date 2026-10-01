@@ -343,6 +343,27 @@ class TestXMLParser : XCTestCase {
         ])
     }
 
+    func test_attributeDeclarationEnumeratedImpliedDefaultIsNil() {
+        // `#IMPLIED` reports a NULL default value, while an enumerated type
+        // reports a non-NULL enumeration tree. This is the case where the
+        // optional `tree` holds a real value that has to be freed.
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec kind (a|b) #IMPLIED>]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "kind", element: "Rec", defaultValue: nil),
+        ])
+    }
+
+    func test_attributeDeclarationEnumeratedQuotedDefault() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec kind (a|b) "a">]><Rec/>"#
+        XCTAssertTrue(parse(xml, with: delegate))
+        XCTAssertEqual(delegate.attributeDeclarations, [
+            .init(name: "kind", element: "Rec", defaultValue: "a"),
+        ])
+    }
+
     func test_notationDeclarationSystemOnly() {
         let delegate = DTDDelegate()
         let xml = #"<!DOCTYPE Rec [<!NOTATION n SYSTEM "x">]><Rec/>"#
@@ -371,6 +392,12 @@ class TestXMLParser : XCTestCase {
     }
 
     func test_unparsedEntityDeclarationWithoutPublicID() {
+        // `parserError` is deliberately not asserted. FoundationXML never creates
+        // a libxml2 document, so `xmlSAX2UnparsedEntityDecl` (reached through
+        // `_NSXMLParserUnparsedEntityDecl`) has no document to add the entity to.
+        // libxml2 2.9.x reports that as "xmlAddDocEntity: document is NULL",
+        // which FoundationXML records as `parserError` although `parse()` returns
+        // true; newer libxml2 returns early without an error.
         let delegate = DTDDelegate()
         let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!NOTATION n SYSTEM "x"><!ENTITY e SYSTEM "y" NDATA n>]><Rec/>"#
         XCTAssertTrue(parse(xml, with: delegate))
@@ -379,7 +406,7 @@ class TestXMLParser : XCTestCase {
         ])
     }
 
-    func test_elementDeclarationWithoutContentModelOrExternalIDs() {
+    func test_elementDeclarationWithoutContentModelOrExternalIDsDoesNotCrash() {
         // `<!ELEMENT Rec EMPTY>` reports a NULL content model, and a document
         // that only has an internal subset reports NULL external identifiers.
         let delegate = DTDDelegate()
