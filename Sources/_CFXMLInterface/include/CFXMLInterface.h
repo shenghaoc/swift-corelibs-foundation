@@ -303,10 +303,10 @@ struct _NSXMLParserBridge {
                            const unsigned char *_Nullable prefix,
                            const unsigned char *_Nullable URI,
                            int nb_namespaces,
-                           const unsigned char *_Nullable *_Nonnull namespaces,
+                           const unsigned char *_Nullable *_Nullable namespaces,
                            int nb_attributes,
                            int nb_defaulted,
-                           const unsigned char *_Nullable *_Nonnull attributes);
+                           const unsigned char *_Nullable *_Nullable attributes);
     void (*endElementNs)(_CFXMLInterface ctx,
                          const unsigned char *localname,
                          const unsigned char *_Nullable prefix,

@@ -138,6 +138,44 @@ class TestXMLParser : XCTestCase {
         XCTAssertTrue(res)
     }
 
+    func test_startElementNamespaceAndAttributeArrays() {
+        class Delegate: NSObject, XMLParserDelegate {
+            var log: [String] = []
+            func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String]) {
+                log.append("start \(elementName) \(namespaceURI ?? "nil") \(qName ?? "nil") \(attributeDict.sorted { $0.key < $1.key })")
+            }
+            func parser(_ parser: XMLParser, didStartMappingPrefix prefix: String, toURI namespaceURI: String) {
+                log.append("map \(prefix) \(namespaceURI)")
+            }
+        }
+        let xml = "<r xmlns='urn:d' xmlns:p='urn:p'><a/><b x='1'/><c p:y='2'/></r>"
+        let expected = [
+            [
+                "start r nil nil [(key: \"xmlns\", value: \"urn:d\"), (key: \"xmlns:p\", value: \"urn:p\")]",
+                "start a nil nil []",
+                "start b nil nil [(key: \"x\", value: \"1\")]",
+                "start c nil nil [(key: \"p:y\", value: \"2\")]",
+            ],
+            [
+                "map p urn:p",
+                "map  urn:d",
+                "start r urn:d r []",
+                "start a urn:d a []",
+                "start b urn:d b [(key: \"x\", value: \"1\")]",
+                "start c urn:d c [(key: \"p:y\", value: \"2\")]",
+            ],
+        ]
+        for (namespaces, expectedLog) in zip([false, true], expected) {
+            let parser = XMLParser(data: xml.data(using: .utf8)!)
+            parser.shouldProcessNamespaces = namespaces
+            parser.shouldReportNamespacePrefixes = namespaces
+            let delegate = Delegate()
+            parser.delegate = delegate
+            XCTAssertTrue(parser.parse())
+            XCTAssertEqual(delegate.log, expectedLog)
+        }
+    }
+
     func test_sr9758_abortParsing() {
         class Delegate: NSObject, XMLParserDelegate {
             func parserDidStartDocument(_ parser: XMLParser) { parser.abortParsing() }

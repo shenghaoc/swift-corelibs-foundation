@@ -234,13 +234,13 @@ internal func _NSXMLParserEndDocument(_ ctx: _CFXMLInterface) -> Void {
 }
 
 
-internal func _NSXMLParserStartElementNs(_ ctx: _CFXMLInterface, localname: UnsafePointer<UInt8>, prefix: UnsafePointer<UInt8>?, URI: UnsafePointer<UInt8>?, nb_namespaces: Int32, namespaces: UnsafeMutablePointer<UnsafePointer<UInt8>?>, nb_attributes: Int32, nb_defaulted: Int32, attributes: UnsafeMutablePointer<UnsafePointer<UInt8>?>) -> Void {
+internal func _NSXMLParserStartElementNs(_ ctx: _CFXMLInterface, localname: UnsafePointer<UInt8>, prefix: UnsafePointer<UInt8>?, URI: UnsafePointer<UInt8>?, nb_namespaces: Int32, namespaces: UnsafeMutablePointer<UnsafePointer<UInt8>?>?, nb_attributes: Int32, nb_defaulted: Int32, attributes: UnsafeMutablePointer<UnsafePointer<UInt8>?>?) -> Void {
     let parser = ctx.parser
     let reportNamespaces = parser.shouldReportNamespacePrefixes
 
     var nsDict = [String:String]()
     var attrDict = [String:String]()
-    if nb_attributes + nb_namespaces > 0 {
+    if nb_attributes + nb_namespaces > 0, let namespaces {
         for idx in stride(from: 0, to: Int(nb_namespaces) * 2, by: 2) {
             var namespaceNameString: String?
             var asAttrNamespaceNameString: String?
@@ -270,31 +270,33 @@ internal func _NSXMLParserStartElementNs(_ ctx: _CFXMLInterface, localname: Unsa
         parser._pushNamespaces(nsDict)
     }
     
-    for idx in stride(from: 0, to: Int(nb_attributes) * 5, by: 5) {
-        if attributes[idx] == nil {
-            continue
-        }
-        var attributeQName: String
-        let attrLocalName = attributes[idx]!
-        let attrLocalNameString = UTF8STRING(attrLocalName)!
-        let attrPrefix = attributes[idx + 1]
-        if let attrPrefixString = UTF8STRING(attrPrefix), !attrPrefixString.isEmpty {
-            attributeQName = attrPrefixString + ":" + attrLocalNameString
-        } else {
-            attributeQName = attrLocalNameString
-        }
-        // idx+2 = URI, which we throw away
-        // idx+3 = value, i+4 = endvalue
-        // By using XML_PARSE_NOENT the attribute value string will already have entities resolved
-        var attributeValue = ""
-        if let value = attributes[idx + 3], let endvalue = attributes[idx + 4] {
-            let numBytesWithoutTerminator = endvalue - value
-            if numBytesWithoutTerminator > 0 {
-                let buffer = UnsafeBufferPointer(start: value,
-                                                 count: numBytesWithoutTerminator)
-                attributeValue = String(decoding: buffer, as: UTF8.self)
+    if let attributes {
+        for idx in stride(from: 0, to: Int(nb_attributes) * 5, by: 5) {
+            if attributes[idx] == nil {
+                continue
             }
-            attrDict[attributeQName] = attributeValue
+            var attributeQName: String
+            let attrLocalName = attributes[idx]!
+            let attrLocalNameString = UTF8STRING(attrLocalName)!
+            let attrPrefix = attributes[idx + 1]
+            if let attrPrefixString = UTF8STRING(attrPrefix), !attrPrefixString.isEmpty {
+                attributeQName = attrPrefixString + ":" + attrLocalNameString
+            } else {
+                attributeQName = attrLocalNameString
+            }
+            // idx+2 = URI, which we throw away
+            // idx+3 = value, i+4 = endvalue
+            // By using XML_PARSE_NOENT the attribute value string will already have entities resolved
+            var attributeValue = ""
+            if let value = attributes[idx + 3], let endvalue = attributes[idx + 4] {
+                let numBytesWithoutTerminator = endvalue - value
+                if numBytesWithoutTerminator > 0 {
+                    let buffer = UnsafeBufferPointer(start: value,
+                                                     count: numBytesWithoutTerminator)
+                    attributeValue = String(decoding: buffer, as: UTF8.self)
+                }
+                attrDict[attributeQName] = attributeValue
+            }
         }
     }
 
