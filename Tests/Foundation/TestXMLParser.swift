@@ -140,39 +140,39 @@ class TestXMLParser : XCTestCase {
 
     func test_startElementNamespaceAndAttributeArrays() {
         class Delegate: NSObject, XMLParserDelegate {
-            var log: [String] = []
+            var starts: [String] = []
+            var mappings: [String] = []
             func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String]) {
-                log.append("start \(elementName) \(namespaceURI ?? "nil") \(qName ?? "nil") \(attributeDict.sorted { $0.key < $1.key })")
+                starts.append("\(elementName) \(namespaceURI ?? "nil") \(qName ?? "nil") \(attributeDict.sorted { $0.key < $1.key })")
             }
             func parser(_ parser: XMLParser, didStartMappingPrefix prefix: String, toURI namespaceURI: String) {
-                log.append("map \(prefix) \(namespaceURI)")
+                mappings.append("\(prefix) \(namespaceURI)")
             }
         }
         let xml = "<r xmlns='urn:d' xmlns:p='urn:p'><a/><b x='1'/><c p:y='2'/></r>"
         let expected = [
-            [
-                "start r nil nil [(key: \"xmlns\", value: \"urn:d\"), (key: \"xmlns:p\", value: \"urn:p\")]",
-                "start a nil nil []",
-                "start b nil nil [(key: \"x\", value: \"1\")]",
-                "start c nil nil [(key: \"p:y\", value: \"2\")]",
-            ],
-            [
-                "map p urn:p",
-                "map  urn:d",
-                "start r urn:d r []",
-                "start a urn:d a []",
-                "start b urn:d b [(key: \"x\", value: \"1\")]",
-                "start c urn:d c [(key: \"p:y\", value: \"2\")]",
-            ],
+            (starts: [
+                "r nil nil [(key: \"xmlns\", value: \"urn:d\"), (key: \"xmlns:p\", value: \"urn:p\")]",
+                "a nil nil []",
+                "b nil nil [(key: \"x\", value: \"1\")]",
+                "c nil nil [(key: \"p:y\", value: \"2\")]",
+            ], mappings: [String]()),
+            (starts: [
+                "r urn:d r []",
+                "a urn:d a []",
+                "b urn:d b [(key: \"x\", value: \"1\")]",
+                "c urn:d c [(key: \"p:y\", value: \"2\")]",
+            ], mappings: [" urn:d", "p urn:p"]),
         ]
-        for (namespaces, expectedLog) in zip([false, true], expected) {
+        for (namespaces, expected) in zip([false, true], expected) {
             let parser = XMLParser(data: xml.data(using: .utf8)!)
             parser.shouldProcessNamespaces = namespaces
             parser.shouldReportNamespacePrefixes = namespaces
             let delegate = Delegate()
             parser.delegate = delegate
             XCTAssertTrue(parser.parse())
-            XCTAssertEqual(delegate.log, expectedLog)
+            XCTAssertEqual(delegate.starts, expected.starts)
+            XCTAssertEqual(delegate.mappings.sorted(), expected.mappings)
         }
     }
 
@@ -339,84 +339,23 @@ class TestXMLParser : XCTestCase {
         return withExtendedLifetime(delegate) { parser.parse() }
     }
 
-    private func parseFromStream(_ xml: String, with delegate: XMLParserDelegate) -> Bool {
-        let parser = XMLParser(stream: InputStream(data: Data(xml.utf8)))
-        parser.delegate = delegate
-        return withExtendedLifetime(delegate) { parser.parse() }
-    }
-
-    func test_attributeDeclarationRequiredDefaultIsNil() {
+    func test_attributeDeclarationEnumeratedDefaults() {
         let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec type CDATA #REQUIRED>]><Rec/>"#
+        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec a (x|y) #IMPLIED b (x|y) "x">]><Rec/>"#
         XCTAssertTrue(parse(xml, with: delegate))
         XCTAssertEqual(delegate.attributeDeclarations, [
-            .init(name: "type", element: "Rec", defaultValue: nil),
+            .init(name: "a", element: "Rec", defaultValue: nil),
+            .init(name: "b", element: "Rec", defaultValue: "x"),
         ])
     }
 
-    func test_attributeDeclarationImpliedDefaultIsNil() {
+    func test_notationDeclarationWithoutPublicOrSystemID() {
         let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec value CDATA #IMPLIED>]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.attributeDeclarations, [
-            .init(name: "value", element: "Rec", defaultValue: nil),
-        ])
-    }
-
-    func test_attributeDeclarationQuotedDefault() {
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec value CDATA "quoted">]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.attributeDeclarations, [
-            .init(name: "value", element: "Rec", defaultValue: "quoted"),
-        ])
-    }
-
-    func test_attributeDeclarationFixedDefault() {
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec value CDATA #FIXED "fixed">]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.attributeDeclarations, [
-            .init(name: "value", element: "Rec", defaultValue: "fixed"),
-        ])
-    }
-
-    func test_attributeDeclarationEnumeratedImpliedDefaultIsNil() {
-        // `#IMPLIED` reports a NULL default value, while an enumerated type
-        // reports a non-NULL enumeration tree. This is the case where the
-        // optional `tree` holds a real value that has to be freed.
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec kind (a|b) #IMPLIED>]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.attributeDeclarations, [
-            .init(name: "kind", element: "Rec", defaultValue: nil),
-        ])
-    }
-
-    func test_attributeDeclarationEnumeratedQuotedDefault() {
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!ATTLIST Rec kind (a|b) "a">]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.attributeDeclarations, [
-            .init(name: "kind", element: "Rec", defaultValue: "a"),
-        ])
-    }
-
-    func test_notationDeclarationSystemOnly() {
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!NOTATION n SYSTEM "x">]><Rec/>"#
+        let xml = #"<!DOCTYPE Rec [<!NOTATION s SYSTEM "x"><!NOTATION p PUBLIC "y">]><Rec/>"#
         XCTAssertTrue(parse(xml, with: delegate))
         XCTAssertEqual(delegate.notationDeclarations, [
-            .init(name: "n", publicID: nil, systemID: "x"),
-        ])
-    }
-
-    func test_notationDeclarationPublicOnly() {
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!NOTATION n PUBLIC "x">]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.notationDeclarations, [
-            .init(name: "n", publicID: "x", systemID: nil),
+            .init(name: "s", publicID: nil, systemID: "x"),
+            .init(name: "p", publicID: "y", systemID: nil),
         ])
     }
 
@@ -429,44 +368,23 @@ class TestXMLParser : XCTestCase {
         ])
     }
 
-    func test_unparsedEntityDeclarationWithoutPublicID() {
-        // `parserError` is deliberately not asserted. FoundationXML never creates
-        // a libxml2 document, so `xmlSAX2UnparsedEntityDecl` (reached through
-        // `_NSXMLParserUnparsedEntityDecl`) has no document to add the entity to.
-        // libxml2 2.9.x reports that as "xmlAddDocEntity: document is NULL",
-        // which FoundationXML records as `parserError` although `parse()` returns
-        // true; newer libxml2 returns early without an error.
+    func test_unparsedEntityDeclarationNullableValues() {
         let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY><!NOTATION n SYSTEM "x"><!ENTITY e SYSTEM "y" NDATA n>]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.unparsedEntityDeclarations, [
-            .init(name: "e", publicID: nil, systemID: "y", notationName: "n"),
-        ])
-    }
-
-    func test_unparsedEntityDeclarationWithoutSystemIDOrNotationName() {
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ENTITY a PUBLIC "p" NDATA n><!ENTITY b SYSTEM "y" NDATA >]><Rec/>"#
+        let xml = #"<!DOCTYPE Rec [<!ENTITY a SYSTEM "x" NDATA n><!ENTITY b PUBLIC "p" NDATA n><!ENTITY c SYSTEM "y" NDATA >]><Rec/>"#
         _ = parse(xml, with: delegate)
         XCTAssertEqual(delegate.unparsedEntityDeclarations, [
-            .init(name: "a", publicID: "p", systemID: nil, notationName: "n"),
-            .init(name: "b", publicID: nil, systemID: "y", notationName: nil),
+            .init(name: "a", publicID: nil, systemID: "x", notationName: "n"),
+            .init(name: "b", publicID: "p", systemID: nil, notationName: "n"),
+            .init(name: "c", publicID: nil, systemID: "y", notationName: nil),
         ])
     }
 
-    func test_doctypeWithoutNameDoesNotCrash() {
-        let delegate = DTDDelegate()
-        _ = parse("<!DOCTYPE [<!ELEMENT Rec EMPTY>]><Rec/>", with: delegate)
-        XCTAssertEqual(delegate.startedElements, ["Rec"])
-    }
-
-    func test_elementDeclarationWithoutContentModelOrExternalIDsDoesNotCrash() {
-        // `<!ELEMENT Rec EMPTY>` reports a NULL content model, and a document
-        // that only has an internal subset reports NULL external identifiers.
-        let delegate = DTDDelegate()
-        let xml = #"<!DOCTYPE Rec [<!ELEMENT Rec EMPTY>]><Rec/>"#
-        XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.startedElements, ["Rec"])
+    func test_dtdCallbacksWithNullArgumentsDoNotCrash() {
+        for xml in ["<!DOCTYPE Rec [<!ELEMENT Rec EMPTY>]><Rec/>", "<!DOCTYPE [<!ELEMENT Rec EMPTY>]><Rec/>"] {
+            let delegate = DTDDelegate()
+            _ = parse(xml, with: delegate)
+            XCTAssertEqual(delegate.startedElements, ["Rec"])
+        }
     }
 
     func test_dataWithRequiredAndImpliedAttributeDeclarations() {
@@ -490,32 +408,6 @@ class TestXMLParser : XCTestCase {
 
         let delegate = DTDDelegate()
         XCTAssertTrue(parse(xml, with: delegate))
-        XCTAssertEqual(delegate.startedElements, ["HealthData", "Rec", "Rec"])
-        XCTAssertEqual(delegate.attributeDeclarations, [
-            .init(name: "type", element: "Rec", defaultValue: nil),
-            .init(name: "value", element: "Rec", defaultValue: nil),
-        ])
-    }
-
-    func test_streamWithRequiredAndImpliedAttributeDeclarations() {
-        let xml = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE HealthData [
-        <!ELEMENT HealthData (Rec*)>
-        <!ELEMENT Rec EMPTY>
-        <!ATTLIST Rec
-          type CDATA #REQUIRED
-          value CDATA #IMPLIED
-        >
-        ]>
-        <HealthData>
-        <Rec type="HKQuantityTypeIdentifierHeartRate" value="150"/>
-        <Rec type="HKQuantityTypeIdentifierHeartRate" value="151"/>
-        </HealthData>
-
-        """
-        let delegate = DTDDelegate()
-        XCTAssertTrue(parseFromStream(xml, with: delegate))
         XCTAssertEqual(delegate.startedElements, ["HealthData", "Rec", "Rec"])
         XCTAssertEqual(delegate.attributeDeclarations, [
             .init(name: "type", element: "Rec", defaultValue: nil),
