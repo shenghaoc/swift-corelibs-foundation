@@ -444,6 +444,22 @@ class TestXMLParser : XCTestCase {
         ])
     }
 
+    func test_unparsedEntityDeclarationWithoutSystemIDOrNotationName() {
+        let delegate = DTDDelegate()
+        let xml = #"<!DOCTYPE Rec [<!ENTITY a PUBLIC "p" NDATA n><!ENTITY b SYSTEM "y" NDATA >]><Rec/>"#
+        _ = parse(xml, with: delegate)
+        XCTAssertEqual(delegate.unparsedEntityDeclarations, [
+            .init(name: "a", publicID: "p", systemID: nil, notationName: "n"),
+            .init(name: "b", publicID: nil, systemID: "y", notationName: nil),
+        ])
+    }
+
+    func test_doctypeWithoutNameDoesNotCrash() {
+        let delegate = DTDDelegate()
+        _ = parse("<!DOCTYPE [<!ELEMENT Rec EMPTY>]><Rec/>", with: delegate)
+        XCTAssertEqual(delegate.startedElements, ["Rec"])
+    }
+
     func test_elementDeclarationWithoutContentModelOrExternalIDsDoesNotCrash() {
         // `<!ELEMENT Rec EMPTY>` reports a NULL content model, and a document
         // that only has an internal subset reports NULL external identifiers.

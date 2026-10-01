@@ -129,7 +129,7 @@ internal func _NSXMLParserGetContext(_ ctx: _CFXMLInterface) -> _CFXMLInterfaceP
     return ctx.parser._parserContext!
 }
 
-internal func _NSXMLParserInternalSubset(_ ctx: _CFXMLInterface, name: UnsafePointer<UInt8>, ExternalID: UnsafePointer<UInt8>?, SystemID: UnsafePointer<UInt8>?) -> Void {
+internal func _NSXMLParserInternalSubset(_ ctx: _CFXMLInterface, name: UnsafePointer<UInt8>?, ExternalID: UnsafePointer<UInt8>?, SystemID: UnsafePointer<UInt8>?) -> Void {
     _CFXMLInterfaceSAX2InternalSubset(ctx.parser._parserContext, name, ExternalID, SystemID)
 }
 
@@ -204,7 +204,7 @@ internal func _NSXMLParserElementDecl(_ ctx: _CFXMLInterface, name: UnsafePointe
     }
 }
 
-internal func _NSXMLParserUnparsedEntityDecl(_ ctx: _CFXMLInterface, name: UnsafePointer<UInt8>, publicId: UnsafePointer<UInt8>?, systemId: UnsafePointer<UInt8>, notationName: UnsafePointer<UInt8>) -> Void {
+internal func _NSXMLParserUnparsedEntityDecl(_ ctx: _CFXMLInterface, name: UnsafePointer<UInt8>, publicId: UnsafePointer<UInt8>?, systemId: UnsafePointer<UInt8>?, notationName: UnsafePointer<UInt8>?) -> Void {
     let parser = ctx.parser
     let context = _NSXMLParserGetContext(ctx)
     
@@ -381,7 +381,7 @@ internal func _NSXMLParserComment(_ ctx: _CFXMLInterface, value: UnsafePointer<U
     }
 }
 
-internal func _NSXMLParserExternalSubset(_ ctx: _CFXMLInterface, name: UnsafePointer<UInt8>, ExternalID: UnsafePointer<UInt8>?, SystemID: UnsafePointer<UInt8>?) -> Void {
+internal func _NSXMLParserExternalSubset(_ ctx: _CFXMLInterface, name: UnsafePointer<UInt8>?, ExternalID: UnsafePointer<UInt8>?, SystemID: UnsafePointer<UInt8>?) -> Void {
     _CFXMLInterfaceSAX2ExternalSubset(ctx.parser._parserContext, name, ExternalID, SystemID)
 }
 
