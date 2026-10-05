@@ -138,6 +138,76 @@ class TestXMLParser : XCTestCase {
         XCTAssertTrue(res)
     }
 
+    func test_entityDeclarationsWithoutExternalReporting() {
+        checkEntityDeclarations(shouldResolveExternalEntities: false)
+    }
+
+    func test_entityDeclarationsWithExternalReporting() {
+        checkEntityDeclarations(shouldResolveExternalEntities: true)
+    }
+
+    private func checkEntityDeclarations(shouldResolveExternalEntities: Bool) {
+        enum Declaration: Equatable {
+            case internalEntity(String, String?)
+            case externalEntity(String, String?, String?)
+            case notation(String, String?, String?)
+            case unparsedEntity(String, String?, String?, String?)
+        }
+
+        class Delegate: NSObject, XMLParserDelegate {
+            var declarations: [Declaration] = []
+            var resolutionCalls = 0
+
+            func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) {
+                declarations.append(.internalEntity(name, value))
+            }
+            func parser(_ parser: XMLParser, foundExternalEntityDeclarationWithName name: String, publicID: String?, systemID: String?) {
+                declarations.append(.externalEntity(name, publicID, systemID))
+            }
+            func parser(_ parser: XMLParser, foundNotationDeclarationWithName name: String, publicID: String?, systemID: String?) {
+                declarations.append(.notation(name, publicID, systemID))
+            }
+            func parser(_ parser: XMLParser, foundUnparsedEntityDeclarationWithName name: String, publicID: String?, systemID: String?, notationName: String?) {
+                declarations.append(.unparsedEntity(name, publicID, systemID, notationName))
+            }
+            func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? {
+                resolutionCalls += 1
+                return nil
+            }
+        }
+
+        let xml = """
+        <!DOCTYPE root [
+          <!ENTITY literal 'Literal value'>
+          <!ENTITY system SYSTEM 'entity-system.xml'>
+          <!ENTITY public PUBLIC '-//FoundationXML//Entity Test//EN' 'entity-public.xml'>
+          <!NOTATION image PUBLIC '-//FoundationXML//Notation Test//EN' 'image-format'>
+          <!ENTITY unparsed PUBLIC '-//FoundationXML//Unparsed Test//EN' 'image.bin' NDATA image>
+        ]><root/>
+        """
+        let parser = XMLParser(data: Data(xml.utf8))
+        let delegate = Delegate()
+        parser.delegate = delegate
+        parser.shouldResolveExternalEntities = shouldResolveExternalEntities
+        parser.externalEntityResolvingPolicy = .never
+        XCTAssertTrue(parser.parse())
+        XCTAssertNil(parser.parserError)
+
+        var expected: [Declaration] = [.internalEntity("literal", "Literal value")]
+        if shouldResolveExternalEntities {
+            expected += [
+                .externalEntity("system", nil, "entity-system.xml"),
+                .externalEntity("public", "-//FoundationXML//Entity Test//EN", "entity-public.xml"),
+            ]
+        }
+        expected += [
+            .notation("image", "-//FoundationXML//Notation Test//EN", "image-format"),
+            .unparsedEntity("unparsed", "-//FoundationXML//Unparsed Test//EN", "image.bin", "image"),
+        ]
+        XCTAssertEqual(delegate.declarations, expected)
+        XCTAssertEqual(delegate.resolutionCalls, 0)
+    }
+
     func test_sr9758_abortParsing() {
         class Delegate: NSObject, XMLParserDelegate {
             func parserDidStartDocument(_ parser: XMLParser) { parser.abortParsing() }
