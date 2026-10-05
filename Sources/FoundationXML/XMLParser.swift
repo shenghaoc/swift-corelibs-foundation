@@ -178,9 +178,9 @@ internal func _NSXMLParserEntityDecl(_ ctx: _CFXMLInterface, name: UnsafePointer
     let nameString = UTF8STRING(name)!
 
     switch CFIndex(type) {
-    case _kCFXMLDTDNodeEntityTypeInternalGeneral:
+    case _kCFXMLDTDNodeEntityTypeInternalGeneral, _kCFXMLDTDNodeEntityTypeInternalParameter:
         delegate.parser(parser, foundInternalEntityDeclarationWithName: nameString, value: UTF8STRING(content))
-    case _kCFXMLDTDNodeEntityTypeExternalGeneralParsed:
+    case _kCFXMLDTDNodeEntityTypeExternalGeneralParsed, _kCFXMLDTDNodeEntityTypeExternalParameter:
         // Darwin gates parsed external declaration reporting on this flag.
         if parser.shouldResolveExternalEntities {
             delegate.parser(parser, foundExternalEntityDeclarationWithName: nameString, publicID: UTF8STRING(publicId), systemID: UTF8STRING(systemId))

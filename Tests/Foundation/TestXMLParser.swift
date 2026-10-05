@@ -181,6 +181,9 @@ class TestXMLParser : XCTestCase {
           <!ENTITY literal 'Literal value'>
           <!ENTITY system SYSTEM 'entity-system.xml'>
           <!ENTITY public PUBLIC '-//FoundationXML//Entity Test//EN' 'entity-public.xml'>
+          <!ENTITY % internalPE 'value'>
+          <!ENTITY % externalPE SYSTEM 'parameter.dtd'>
+          <!ENTITY % publicPE PUBLIC '-//FoundationXML//Parameter Test//EN' 'public-parameter.dtd'>
           <!NOTATION image PUBLIC '-//FoundationXML//Notation Test//EN' 'image-format'>
           <!ENTITY unparsed PUBLIC '-//FoundationXML//Unparsed Test//EN' 'image.bin' NDATA image>
         ]><root/>
@@ -198,6 +201,13 @@ class TestXMLParser : XCTestCase {
             expected += [
                 .externalEntity("system", nil, "entity-system.xml"),
                 .externalEntity("public", "-//FoundationXML//Entity Test//EN", "entity-public.xml"),
+            ]
+        }
+        expected.append(.internalEntity("internalPE", "value"))
+        if shouldResolveExternalEntities {
+            expected += [
+                .externalEntity("externalPE", nil, "parameter.dtd"),
+                .externalEntity("publicPE", "-//FoundationXML//Parameter Test//EN", "public-parameter.dtd"),
             ]
         }
         expected += [
