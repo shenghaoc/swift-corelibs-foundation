@@ -105,6 +105,37 @@ class TestXMLParser : XCTestCase {
         XCTAssertTrue(res)
     }
 
+    func test_withLargeData() {
+        let element = "<item>" + String(repeating: "x", count: 1_000) + "</item>"
+        let document = "<root>" + String(repeating: element, count: 10_000) + "</root>"
+        let data = Data(document.utf8)
+        XCTAssertGreaterThan(data.count, 10_000_000)
+
+        let parser = XMLParser(data: data)
+        let delegate = XMLParserDelegateEventStream()
+        parser.delegate = delegate
+
+        XCTAssertTrue(parser.parse())
+        XCTAssertTrue(delegate.events.contains(.endDocument))
+    }
+
+    func test_withTrailingNulAboveChunkSize() {
+        // A Document longer than one parser chunk (131_072 bytes), with the trailing NUL byte
+        // that String.utf8CString appends. The final data chunk must carry the terminating flag
+        // so libxml2's "extra content" result is handled like the single-chunk case on every
+        // libxml2 version. Data input therefore needs two chunks here.
+        var data = Data(("<root>" + String(repeating: "x", count: 131_072) + "</root>").utf8)
+        data.append(0)
+        XCTAssertGreaterThan(data.count, 131_072)
+
+        let parser = XMLParser(data: data)
+        let delegate = XMLParserDelegateEventStream()
+        parser.delegate = delegate
+
+        XCTAssertTrue(parser.parse())
+        XCTAssertTrue(delegate.events.contains(.endDocument))
+    }
+
     func test_withDataEncodings() {
         // If th <?xml header isn't present, any non-UTF8 encodings fail. This appears to be libxml2 behavior.
         // These don't work, it may just be an issue with the `encoding=xxx`.
